@@ -290,7 +290,7 @@ class PPO:
                 self.lr = min(LR_BOUNDS[1], self.lr * LR_FACTOR)
             for group in self.optimizer.param_groups:
                 group["lr"] = self.lr
-        self.stats = {"policy_loss": float(policy_loss), "value_loss": float(value_loss), "kl": kl}
+        self.stats = {"policy_loss": policy_loss.detach().item(), "value_loss": value_loss.detach().item(), "kl": kl}
 
     # ------------------------------------------------------------------ #
     def save(self, path: Path, include_optimizer: bool = True) -> None:
