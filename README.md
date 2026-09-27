@@ -1,208 +1,222 @@
-# AI simülasyonları
+<div align="center">
 
-Bu klasörde pekiştirmeli öğrenmeyle sıfırdan öğrenen iki simülasyon var:
+# AI Simulations
 
-| | Başlatma | Ne öğreniyor |
-|---|---|---|
-| **AI Racing** | `python main.py` | 16 araba pistte tur atmayı öğrenir; pistler rastgele üretilebilir |
-| **AI Walker** | `python yurume.py` | Hümanoid karakter hiçbir şey bilmeden yürümeyi / koşmayı öğrenir |
+**Two agents that start out knowing nothing and learn purely by trial and error.**<br>
+A 3D humanoid that teaches itself to walk and run, and a fleet of race cars that learn to lap any track.
 
----
+[![CI](https://github.com/yahyio/ai-simulations/actions/workflows/ci.yml/badge.svg)](https://github.com/yahyio/ai-simulations/actions/workflows/ci.yml)
+![Python](https://img.shields.io/badge/python-3.10%2B-3776AB?logo=python&logoColor=white)
+![MuJoCo](https://img.shields.io/badge/physics-MuJoCo%203-0b7285)
+![PyTorch](https://img.shields.io/badge/PyTorch-2.x-EE4C2C?logo=pytorch&logoColor=white)
+[![License: MIT](https://img.shields.io/badge/license-MIT-2ea44f)](LICENSE)
 
-# AI Walker — deneme yanılmayla yürüyen hümanoid
+**English** · [Türkçe](README.tr.md)
 
-```bash
-python yurume.py
-```
+<img src="docs/images/run.gif" alt="Five 3D humanoids sprinting down an athletics track after learning to run from scratch with PPO" width="780">
 
-Karakter (59 kg, 1.68 m; kafa, gövde, bel, iki kol, iki bacak — **11 motorlu eklem**) başlangıçta
-hiçbir şey bilmez: eklemlerine rastgele tork uygular ve yere yığılır. Tek geri bildirimi bir sayıdır
-(ödül): ileri gittikçe artar, düşünce deneme biter. 32 karakter aynı anda dener (ekranda yarı saydam
-"hayaletler"), en öndeki net çizilir ve kamera onu izler.
+</div>
 
-- **Yürümeyi öğren**: hedef hız 1.5 m/s; hızlısı ödüllendirilmez, sakin ve dengeli bir yürüyüş çıkar.
-- **Koşmayı öğren**: olabildiğince hızlı.
+| | Simulation | Learns | Algorithm |
+|---|---|---|---|
+| 🏃 | **AI Walker 3D** | a 21-joint humanoid learns to stand, walk and run | PPO · MuJoCo |
+| 🏎️ | **AI Racing** | 16 cars learn to drive laps on hand-drawn or procedurally generated tracks | Dueling Double DQN |
 
-Ödül yalnızca "ne kadar iyi" olduğunu söyler, "nasıl" yapılacağını değil: ileri hız, ayakta kalma,
-dik duruş (eğiklik cezası), uzun ve **sağ-sol sırayla** atılan adımlar (aynı ayakla sekme cezalı) ve
-az enerji. Bu terimler olmadan ajan belden 45° geriye yatıp sürünmeyi ya da tek ayakla sekmeyi
-"keşfediyordu".
+Both come with a real-time pygame interface — watch the agents fail, improve and eventually master the task,
+with live learning curves, a turbo mode and a free camera — plus a headless mode for fast training.
 
-Ölçülen gelişim (varsayılan ayarlar, pencere olmadan, tek çekirdekte ~4.500 adım/sn):
+## Quick start
 
-| Adım | Yürüme | Koşu |
-|---|---|---|
-| 0.1 M | ~1 sn içinde yere yığılıyor | aynı |
-| 0.45 M | sendeliyor, ~2 sn | ~4 sn, 1.6 m/s |
-| 1 M | 15 sn ayakta, 0.9 m/s | 3.8 m/s |
-| 2 M | **hiç düşmüyor**, 1.3 m/s | 5.2 m/s |
-| 3 M | dik, uzun adımlı yürüyüş, 1.45 m/s | **5.8 m/s** (~21 km/s), 16 sn'de 89 m |
-
-Pencerede turbo (`V`) ile ilk dengeli adımlar birkaç dakikada, düzgün yürüyüş ~10–15 dakikada görülür. Tuşlar: `Boşluk` duraklat,
-`+`/`-` hız, `V` turbo, `G` hayaletleri gizle, `S` kaydet, `Esc` menü.
-
-Pencere olmadan (en hızlı):
+Requires **Python 3.10+**. Works on Windows, Linux and macOS; no GPU needed.
 
 ```bash
-python yurume.py --headless --task yurume --steps 2000000
-```
-
-Teknik: MuJoCo fizik motoru, düzlemsel (2B) hümanoid, PPO (gözlem normalizasyonu, ödül ölçekleme,
-GAE, zaman sınırında değer tahmini). Modeller `data/walker/<görev>/`, günlükler `logs/walker_<görev>.csv`.
-
----
-
-# AI Racing — kendi kendine süren arabalar
-
-Bir pist görselinde, **pekiştirmeli öğrenme (Dueling Double DQN)** ile sürmeyi sıfırdan öğrenen arabalar.
-16 araba aynı "beyni" paylaşır; hepsi aynı anda deneyim toplar. Varsayılan pistte ilk tur genellikle
-**5. bölüm civarında** gelir, birkaç bölüm sonra arabaların neredeyse tamamı turu bitirir.
-
-## Kurulum
-
-```bash
+git clone https://github.com/yahyio/ai-simulations.git
+cd ai-simulations
+python -m venv .venv
+.venv\Scripts\activate          # Linux/macOS: source .venv/bin/activate
 pip install -r requirements.txt
+python main.py                  # launcher: pick a simulation
 ```
 
-Python 3.10+ gerekir.
-
-## Çalıştırma
+Each simulation can also be started directly:
 
 ```bash
-python main.py
+python -m walker                # AI Walker 3D
+python -m racing                # AI Racing
 ```
 
-Menüden **Yeni eğitim**'i seçin. Eğitim sırasında:
+> [!TIP]
+> Pretrained walking and running policies ship with the repository, so **Yürüyüşü izle** (*watch walking*) and
+> **Koşuyu izle** (*watch running*) work right after cloning. Choose **Yürümeyi öğren** (*learn to walk*) to see a
+> brand-new humanoid start from zero. The in-app interface is in Turkish; everything else is documented here.
 
-| Tuş | İşlev |
-|---|---|
-| `Boşluk` | duraklat / devam |
-| `+` / `-` | simülasyon hızı (x1 … x16) |
-| `V` | turbo: pencerenin izin verdiği en yüksek hız |
-| `T` | sensör ışınları: kapalı → lider → tümü |
-| `S` | modeli ve istatistikleri kaydet |
-| `R` | yarışı yeniden başlat |
-| `Esc` | kaydet ve menüye dön |
+---
 
-**En iyi modeli izle**, en hızlı turu atan modeli keşif kapalıyken tek arabayla gösterir.
+## 🏃 AI Walker 3D
 
-### Pencere olmadan hızlı eğitim
+A physically simulated humanoid (63 kg, 1.75 m) is dropped onto an athletics track. It has no idea what legs are
+for: at first it flails and collapses within a second. Its only feedback is a single number per step — the reward —
+and from that alone it discovers balance, stepping, arm swing and finally a steady walk or a sprint.
+48 humanoids train in parallel; in the window you see 8 of them racing side by side, one per lane.
 
-```bash
-python main.py --headless --episodes 300
-```
+<p align="center">
+<img src="docs/images/walk.gif" alt="Humanoids walking with alternating steps and arm swing" width="49%">
+<img src="docs/images/walker.png" alt="The AI Walker 3D window: runners in their lanes and the side panel" width="49%">
+</p>
 
-```bash
-python main.py --headless --resume --episodes 200
-```
-
-## Nasıl çalışıyor?
-
-1. **Pist analizi** (`racing/track.py`): Koyu pikseller pist, kırmızı çizgi başlangıç/bitiştir.
-   Elle checkpoint çizmeye gerek yok: başlangıç çizgisinden itibaren pist boyunca jeodezik mesafe
-   (Dijkstra) hesaplanır. Bu "ilerleme alanı" hem ödülü hem de tur/ters yön tespitini sağlar.
-2. **Ortam** (`racing/env.py`): Tüm arabalar numpy ile tek adımda güncellenir: ivme, fren,
-   sürtünme, yüksek hızda savrulma, 7 mesafe sensörü. Zaman sabit adımlıdır; simülasyon hızı
-   tur sürelerini ve öğrenmeyi etkilemez.
-3. **Gözlem**: sensör mesafeleri, hız, arabanın pist yönüne göre açısı (sin/cos) ve son direksiyon.
-4. **Ödül**: pist boyunca ilerleme (+), her adım küçük ceza, pistten çıkma / ters yön / hareketsizlik (−),
-   tur tamamlama (+20).
-5. **Ajan** (`racing/agent.py`): Dueling mimari, Double DQN hedefi, 3 adımlı getiri, yumuşak hedef ağ,
-   deneyim tekrarı. Arabalar farklı keşif oranlarıyla sürer: ilk araba neredeyse açgözlüdür
-   (öğrendiğini gösterir), sonuncusu en çok keşfeder.
-
-## Rastgele pist oluşturma
-
-Menüde **Pist oluştur**: `←`/`→` ile zorluk (**Kolay / Orta / Zor / Rastgele**), `R` ile yeni pist, `Enter`
-ile kullan, `O` ile varsayılan piste dön. Pistler her seferinde farklıdır, kendini kesmez ve kapalı
-döngüdür; `tracks/` klasörüne kaydedilir.
-
-| Zorluk | Genişlik | Karakter |
+| Steps | Walking (target 1.4 m/s) | Running (as fast as possible) |
 |---|---|---|
-| Kolay | 96–112 px | geniş, yumuşak virajlar |
-| Orta | 72–84 px | sık virajlar |
-| Zor | 54–64 px | dar, keskin virajlar ve şikanlar |
+| 0.5 M | flails and falls within 2 s | flails and falls within 2 s |
+| 2 M | first wobbly steps, 7 m before falling | stumbles forward: 22 m at 2.1 m/s |
+| 4 M | walks the full 20 s in 93 % of the attempts, 1.44 m/s | 57 m at 3.8 m/s |
+| 6 M | steady alternating gait with arm swing, 97 % without a fall | 75 m at 5.0 m/s |
+| 8.5 M | | real running stride with flight phases: 101 m at 5.6 m/s |
 
-Komut satırından da üretilebilir (aynı tohum = aynı pist):
+<sub>Averages over the ~200 training attempts around each point (one attempt lasts at most 20 s), default settings
+(`python -m walker --headless`) on a 6-core desktop CPU at 4 000–6 000 steps/s: a steady walk appears after about
+15 minutes. Training attempts include exploration noise; without it, the bundled policies finished all 48 test runs
+without a fall — walking at 1.31 m/s, running at 6.06 m/s (22 km/h).</sub>
+
+### The body
+
+- **21 actuated joints** — abdomen (3), hips (3 each), knees, ankles (2 each), shoulders (2 each), elbows.
+  Each joint is a PD position servo with human-like torque limits (hip/knee 250 N·m, ankle 150 N·m, shoulder 60 N·m).
+- Legs collide with each other and the ground; realistic mass distribution (MuJoCo, 250 Hz physics).
+- **Actions** (50 Hz): a target angle for every joint.
+- **Observations** (80 values): pelvis height, gravity direction and velocities in the body frame, heading and lane
+  offset, joint angles and velocities, the previous action, foot contacts and the gait clock.
+
+### What it is rewarded for
+
+The reward says *how well* it is doing, never *how* to do it. There are no motion-capture clips or reference gaits.
+The only hint is a metronome: foot contacts that follow its rhythm (a 1 s cycle for walking, 0.7 s for running)
+earn a little extra.
+
+| Term | Why it exists |
+|---|---|
+| Forward speed, **gated by an upright torso** | the goal itself; without the gate it "discovers" diving forward |
+| Staying alive (+2 per step), falling (−10) | falls end the episode |
+| Foot contacts in time with the gait clock | without it the agent hopped forward on both feet like a kangaroo |
+| Upright posture, heading, lane drift, sideways speed | walk straight down the lane, not sideways or twisted |
+| Alternating steps with enough air time | no shuffling, no hopping on one leg |
+| Foot clearance, stance width, sliding feet | no high kicks, no tightrope walking, no skating |
+| Hip/abdomen/shoulder deviation, action rate, torque | natural, energy-efficient motion instead of jitter |
+
+Walking rewards speed up to 1.4 m/s and penalizes going faster; running rewards speed up to 8 m/s.
+
+### Controls
+
+| Key | Action |
+|---|---|
+| `Space` | pause / resume |
+| `+` / `-` | simulation speed (×1 … ×8) |
+| `V` | turbo — train as fast as the CPU allows |
+| `C` | camera preset: 3/4 · side · behind · front · top |
+| mouse drag / wheel | orbit / zoom |
+| `S` | save the model |
+| `Esc` | save and return to the menu |
+
+### Headless training
 
 ```bash
-python main.py --new-track zor --seed 42
+python -m walker --headless --task yurume --steps 10000000   # walking
+python -m walker --headless --task kosu --steps 20000000     # running
 ```
 
-Mevcut model yeni pistte eğitime devam edebilir (sensörlerle genelleme); tur rekorları piste özeldir.
+Models are written to `data/walker/<task>/` (latest and best), learning logs to `logs/walker_<task>.csv`.
+Training resumes from the saved model unless `--fresh` is given.
 
-## Kendi pistinizi çizin
+<details>
+<summary><b>Implementation details</b></summary>
 
-Herhangi bir resim programında:
+- **PPO** with clipped surrogate objective, GAE (γ = 0.99, λ = 0.95), 5 epochs × 4 minibatches per update,
+  a diagonal Gaussian policy (ELU MLP 256-256) with state-independent log-σ, observation normalization,
+  return scaling and value bootstrapping at time limits (`terminated` vs `truncated`).
+- **Vectorized environments** across processes (`walker/vecenv.py`): 48 humanoids are split over the physical cores
+  while the main process runs the network; the same code runs single-process for tests and the viewer.
+- **Rendering** uses MuJoCo's offscreen OpenGL renderer; frames are blitted into pygame, labels are projected
+  from 3D world coordinates.
+- Checkpoints carry a header (version, observation/action size, network shape) so incompatible models are
+  detected with a clear message instead of a crash.
 
-- zemin **beyaz**, pist **siyah** (kapalı bir döngü olmalı),
-- başlangıç/bitiş için pisti enlemesine kesen **kırmızı** (255, 0, 0) bir çizgi.
+</details>
 
-Dosyayı kaydedip `config.yaml` içinde `track.file` değerini değiştirin. Arabalar varsayılan olarak
-çizgiden sağa (dikey çizgide aşağıya) doğru başlar; ters yön için `track.reverse: true`.
-Kırmızı çizgi yoksa pistin en geniş noktası başlangıç kabul edilir.
+---
 
-## Ayarlar
+## 🏎️ AI Racing
 
-Menüdeki **Ayarlar** ekranından ya da `config.yaml` üzerinden. Eksik alanlar varsayılanla tamamlanır,
-sınır dışı değerler kırpılır. Sensör sayısı veya ağ boyutu değişirse kayıtlı model kullanılamaz
-(yeni eğitim gerekir); uygulama bunu açık bir mesajla bildirir.
+<div align="center">
+<img src="docs/images/racing.png" alt="AI Racing: cars learning to drive around a generated track, with learning curves on the side panel" width="780">
+</div>
 
-## Dosyalar
+Sixteen cars share one neural network and learn to drive with **Dueling Double DQN**. On the default track the first
+lap usually comes around episode 5; a few episodes later nearly every car finishes.
+
+- **Any image is a track.** Dark pixels are asphalt, a red line is start/finish. No checkpoints to place by hand:
+  a geodesic distance field (Dijkstra from the start line) gives progress, lap and wrong-way detection for free.
+- **Procedural tracks** with selectable difficulty — Easy, Medium, Hard or Random. Tracks never self-intersect and
+  are validated before use; the same seed always gives the same track.
+- **Vectorized physics** in NumPy: acceleration, braking, friction, drifting at speed and 7 ray-cast distance
+  sensors for every car in a single step, with a fixed time step so simulation speed never changes the results.
+- **Agent:** dueling architecture, Double-DQN targets, 3-step returns, soft target updates, experience replay
+  and a spread of exploration rates across the cars (car #1 is almost greedy and shows what has been learned).
+
+| Key | Action |
+|---|---|
+| `Space` | pause / resume |
+| `+` / `-` | simulation speed (×1 … ×16) |
+| `V` | turbo |
+| `T` | sensor rays: off · leader · all |
+| `S` | save |
+| `R` | restart the race |
+| `Esc` | save and return to the menu |
+
+```bash
+python -m racing --headless --episodes 300          # train without a window
+python -m racing --new-track zor --seed 42          # generate a hard track (kolay/orta/zor/rastgele)
+```
+
+**Draw your own track:** white background, black closed loop, and a red (255, 0, 0) line across the track for
+start/finish. Point `track.file` in `config.yaml` to it (cars start to the right of a vertical line; set
+`track.reverse: true` to flip). All settings are also editable in the in-app **Settings** screen;
+see [`config.example.yaml`](config.example.yaml).
+
+---
+
+## Project layout
 
 ```
-main.py            giriş noktası (menü veya --headless)
-config.yaml        ayarlar
-track.png          varsayılan pist
-racing/
-  track.py         pist analizi (maske, ilerleme ve yön alanları)
-  trackgen.py      rastgele pist üretici
-  picker.py        pist oluşturma ekranı
-  env.py           vektörize fizik, sensörler, ödüller
-  agent.py         DQN ajanı, deneyim havuzu
-  trainer.py       eğitim/izleme döngüsü (arayüzden bağımsız)
-  storage.py       istatistik, günlük ve model dosya yolları
-  app.py           pencere, oturum döngüsü
-  render.py        pist ve araba çizimi
-  hud.py           yan bilgi paneli ve grafikler
-  ui.py            menü, ayarlar, diyaloglar
-  theme.py         renkler ve yazı tipleri
-yurume.py          AI Walker giriş noktası
-walker/
-  model.py         hümanoid fizik modeli (MuJoCo MJCF)
-  env.py           32 paralel karakter, ödül, düşme tespiti
-  ppo.py           PPO öğrenme algoritması
-  trainer.py       eğitim/izleme döngüsü, istatistikler
-  render.py        yandan görünüm sahnesi ve karakter çizimi
-  hud.py, app.py   panel ve pencere
-tracks/            üretilen pistler
-tests/             pytest testleri
-data/              model.pt, best_model.pt, training_stats.json  (eğitimle oluşur)
-logs/episodes.csv  bölüm günlüğü                                 (eğitimle oluşur)
-_eski_surum/       önceki sürümün birebir yedeği
+main.py                 launcher for both simulations
+walker/                 AI Walker 3D
+  model.py              humanoid and stadium, generated as MuJoCo MJCF
+  env.py                reward, observations, falls, step tracking
+  vecenv.py             multi-process vectorized environments
+  ppo.py                PPO, running normalizers, checkpoints
+  trainer.py            training / watching loop (UI independent)
+  render.py             3D stadium renderer and camera
+  app.py, hud.py        window, menu and side panel
+racing/                 AI Racing
+  track.py              track analysis: drivable mask, progress and direction fields
+  trackgen.py           procedural track generator
+  env.py                vectorized car physics and sensors
+  agent.py              Dueling Double DQN with n-step replay
+  trainer.py, storage.py, config.py
+  app.py, render.py, hud.py, picker.py, ui.py
+common/                 shared pygame theme and widgets
+models/walker/          pretrained walking and running policies
+tests/                  pytest suite
 ```
 
-## Testler
+## Development
 
 ```bash
 pip install -r requirements-dev.txt
+python -m pytest --cov        # unit, integration and headless end-to-end tests
+ruff check .                  # lint
 ```
 
-```bash
-python -m pytest --cov
-```
+The CI runs the linter and the test suite on Linux and Windows for every push.
 
-## Eski sürümden farklar
+## License
 
-Eski sürüm 3092 bölümde **hiç tur tamamlayamamıştı**. Başlıca nedenler ve çözümleri:
-
-| Eski sorun | Yeni çözüm |
-|---|---|
-| Pistte checkpoint yoktu; otomatik checkpoint'ler merkez etrafında bir çembere, çoğu pist **dışına** konuyordu | Jeodezik ilerleme alanı: her pist görseliyle checkpoint'siz çalışır |
-| DQN, çarpışma anlarını (terminal geçişleri) deneyim havuzundan **atıyordu**; ajan kaza yapmanın kötü olduğunu hiç öğrenemiyordu | Terminal ve zaman sınırı ayrımıyla doğru n-adımlı hedefler |
-| Ödüller ve tur süreleri duvar saatine bağlıydı; hızlandırınca her şey bozuluyordu | Sabit zaman adımı |
-| Adam için öğrenme oranı 0.101 (≈300 kat fazla) | 0.0003 |
-| Sensörler 4 karede bir güncelleniyordu; ajan eski bilgiye göre karar veriyordu | Her adımda vektörize ışın izleme |
-| 10 araba 10 ayrı ağ eğitiyordu, kaydedilen ise kullanılmayan başka bir ajandı | Tek ortak ağ; doğru model kaydediliyor, en iyi tur ayrıca saklanıyor |
-| Pist (1336 px) pencereye (1200 px) sığmıyordu | Pist görüntü alanına ölçekleniyor |
-| Ayarlar ekranında İptal, değişiklikleri yine de uyguluyordu | Taslak kopya üzerinde düzenleme |
+[MIT](LICENSE) © MrYaho
