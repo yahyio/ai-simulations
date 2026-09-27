@@ -1,0 +1,64 @@
+# AI Racing — örnek yapılandırma
+# İlk çalıştırmada bu varsayılanlarla config.yaml oluşturulur; değiştirmek için
+# ya uygulamadaki Ayarlar ekranını kullanın ya da bu dosyayı config.yaml olarak kopyalayın.
+# Eksik alanlar varsayılanla tamamlanır, sınır dışı değerler kırpılır.
+
+display:
+  width: 1440            # pencere genişliği (sağdaki 340 px bilgi paneli)
+  height: 810
+  fps: 60
+  show_sensors: false    # oturumda T tuşuyla da değiştirilebilir
+  show_trail: true       # liderin arkasında iz çizgisi
+
+simulation:
+  num_cars: 16           # aynı anda deneyim toplayan araba sayısı
+  steps_per_frame: 4     # başlangıç sim hızı (oturumda + / - ile değişir)
+  max_steps_per_episode: 3000
+  idle_timeout_steps: 120  # bu kadar adım ilerlemeyen araba elenir
+  sim_fps: 60            # 1 simülasyon adımı = 1/sim_fps saniye (tur süreleri buna göre)
+  autosave_every: 10     # kaç bölümde bir otomatik kayıt
+  seed: null             # tekrarlanabilir deney için bir tam sayı verin
+
+car:
+  length: 26
+  width: 12
+  max_speed: 7.0         # piksel / adım
+  acceleration: 0.18
+  brake: 0.35
+  drag: 0.012
+  turn_rate_deg: 4.5     # adım başına en fazla dönüş
+  understeer: 0.35       # yüksek hızda dönüş kaybı (0 = yok)
+  sensor_count: 7        # değişirse kayıtlı model kullanılamaz
+  sensor_range: 220
+  sensor_fov_deg: 180
+
+learning:
+  device: auto           # auto | cpu | cuda (küçük ağda CPU daha hızlıdır)
+  learning_rate: 0.0003
+  discount_factor: 0.99
+  batch_size: 128
+  buffer_size: 200000
+  n_step: 3
+  hidden_size: 256
+  target_tau: 0.005
+  learning_starts: 2000
+  train_every: 2
+  gradient_steps: 1
+  epsilon_start: 1.0
+  epsilon_end: 0.05      # biraz kalıcı keşif: ortak ağın ani çöküşlerini azaltır
+  epsilon_decay_steps: 100000
+
+rewards:
+  progress: 1.0          # her 10 px ilerleme için
+  time_penalty: -0.01    # her adım
+  crash: -5.0
+  lap_complete: 20.0
+  wrong_way: -5.0
+  idle: -2.0
+
+track:
+  file: track.png        # koyu renk = pist, kırmızı çizgi = başlangıç/bitiş
+  reverse: false         # true: pisti ters yönde sür
+  track_color: [0, 0, 0]
+  start_line_color: [255, 0, 0]
+  color_tolerance: 100

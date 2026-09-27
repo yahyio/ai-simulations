@@ -1,0 +1,27 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+
+# Test / kapsama
+.pytest_cache/
+.coverage
+htmlcov/
+.ruff_cache/
+
+# Geçici
+*.tmp
+
+# Eğitim çıktıları (yeniden üretilebilir)
+data/
+logs/
+tracks/
+
+# Kullanıcıya özel ayarlar (ilk çalıştırmada varsayılanlarla oluşturulur)
+config.yaml
+
+# Yerel araç klasörleri
+.claude/
+_eski_surum/

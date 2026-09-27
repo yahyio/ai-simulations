@@ -1,0 +1,12 @@
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["."]
+addopts = "-q"
+filterwarnings = ["ignore::DeprecationWarning:pygame.*"]
+
+[tool.coverage.run]
+source = ["racing", "main"]
+omit = ["racing/app.py", "racing/ui.py", "racing/hud.py", "racing/render.py", "racing/theme.py"]
+
+[tool.ruff]
+line-length = 120
