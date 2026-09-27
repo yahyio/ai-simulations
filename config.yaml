@@ -1,0 +1,45 @@
+car:
+  car_height: 40
+  car_width: 15
+  num_cars: 10
+  sensor_count: 5
+  sensor_length: 150
+  speed: 6.0
+  turn_angle: 9.0
+display:
+  height: 800
+  show_hud: true
+  show_sensors: false
+  width: 1200
+learning:
+  agent_type: dqn
+  discount_factor: 0.99
+  exploration_decay: 0.999
+  exploration_rate: 1.0
+  learning_rate: 0.101
+  min_exploration_rate: 0.1
+rewards:
+  backwards: -10.0
+  forward_progress: 5.0
+  lap_complete: 5000
+  off_track: -50
+  speed_bonus: 2.0
+  stay_on_track: 1.0
+simulation:
+  fps: 60
+  max_steps_per_episode: 3000
+  sim_speed_ratio: 50
+track:
+  file: track.png
+  off_track_color:
+  - 255
+  - 255
+  - 255
+  start_line_color:
+  - 255
+  - 0
+  - 0
+  track_color:
+  - 0
+  - 0
+  - 0
