@@ -28,7 +28,7 @@ def test_unknown_keys_are_dropped():
 
 
 def test_invalid_type_raises():
-    with pytest.raises(ConfigError, match="car.max_speed"):
+    with pytest.raises(ConfigError, match=r"car\.max_speed"):
         validate(deep_merge(DEFAULTS, {"car": {"max_speed": "hızlı"}}))
 
 

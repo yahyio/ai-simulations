@@ -7,7 +7,8 @@ from collections import deque
 import numpy as np
 import pygame
 
-from . import theme
+from common import theme
+
 from .env import RaceEnv
 from .track import GRID, Track, box_sum, erode, shift
 

@@ -105,7 +105,8 @@ class NStepAccumulator:
         for q in self.queues:
             q.clear()
 
-    def push(self, env: int, obs, action: int, reward: float, next_obs, terminated: bool, truncated: bool) -> list[tuple]:
+    def push(self, env: int, obs, action: int, reward: float, next_obs,
+             terminated: bool, truncated: bool) -> list[tuple]:
         q = self.queues[env]
         q.append((obs, action, reward))
         out = []

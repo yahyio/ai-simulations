@@ -1,6 +1,6 @@
 import pytest
 
-from main import parse_args
+from racing.__main__ import parse_args
 from racing.ui import SETTINGS, Setting, adjust, format_value
 
 

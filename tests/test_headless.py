@@ -2,8 +2,8 @@
 import pygame
 import pytest
 
-from main import run_headless
 from racing import storage
+from racing.__main__ import run_headless
 from racing.config import deep_merge, validate
 from tests.conftest import make_ring_rgb
 

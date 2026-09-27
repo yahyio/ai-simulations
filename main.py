@@ -1,115 +1,80 @@
-"""AI Araba Simülasyonu — giriş noktası.
+"""AI Simülasyonları — başlatıcı.
 
 Kullanım:
-    python main.py                           # pencereli uygulama (menü)
-    python main.py --headless --episodes 300  # pencere olmadan hızlı eğitim
-    python main.py --headless --resume        # kayıtlı modelden devam
+    python main.py              # simülasyon seçme penceresi
+    python -m racing --help     # AI Racing komut satırı seçenekleri
+    python -m walker --help     # AI Walker 3D komut satırı seçenekleri
 """
 from __future__ import annotations
 
-import argparse
-import logging
 import os
 import sys
+import time
 from pathlib import Path
 
 PROJECT_DIR = Path(__file__).resolve().parent
-log = logging.getLogger("racing")
+PREVIEWS = (Path("docs/images/racing.png"), Path("docs/images/walker.png"))
+WINDOW = (1440, 810)
+SLIDE_SECONDS = 5.0
 
 
-def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
-    parser = argparse.ArgumentParser(description="Pekiştirmeli öğrenme ile kendi kendine süren arabalar.")
-    parser.add_argument("--headless", action="store_true", help="pencere açmadan eğit (en hızlısı)")
-    parser.add_argument("--episodes", type=int, default=200, help="başsız modda eğitilecek bölüm sayısı")
-    parser.add_argument("--resume", action="store_true", help="başsız modda kayıtlı modelden devam et")
-    parser.add_argument("--config", type=Path, default=Path("config.yaml"), help="yapılandırma dosyası")
-    parser.add_argument("--new-track", choices=("kolay", "orta", "zor", "rastgele"),
-                        help="rastgele yeni bir pist üret ve onu kullan")
-    parser.add_argument("--seed", type=int, help="--new-track için tohum (aynı tohum = aynı pist)")
-    args = parser.parse_args(argv)
-    if args.episodes < 1:
-        parser.error("--episodes en az 1 olmalı")
-    return args
+class _Slideshow:
+    """Menü arka planı: önizleme görsellerini sırayla, yumuşak geçişle gösterir."""
+
+    def __init__(self, size: tuple[int, int]):
+        import pygame
+
+        self.images = [
+            pygame.transform.smoothscale(pygame.image.load(str(p)).convert(), size) for p in PREVIEWS if p.exists()
+        ]
+        self.start = time.perf_counter()
+
+    def __call__(self, screen) -> None:
+        if not self.images:
+            return
+        elapsed = time.perf_counter() - self.start
+        index = int(elapsed // SLIDE_SECONDS) % len(self.images)
+        screen.blit(self.images[index], (0, 0))
+        fade = (elapsed % SLIDE_SECONDS) / SLIDE_SECONDS
+        if len(self.images) > 1 and fade > 0.8:
+            nxt = self.images[(index + 1) % len(self.images)]
+            nxt.set_alpha(int(255 * (fade - 0.8) / 0.2))
+            screen.blit(nxt, (0, 0))
+            nxt.set_alpha(None)
 
 
-def run_headless(config: dict, episodes: int, resume: bool) -> int:
-    os.environ.setdefault("SDL_VIDEODRIVER", "dummy")
-    from racing.track import Track, TrackError
-    from racing.trainer import Trainer
+def choose() -> str:
+    import pygame
 
+    from common.widgets import MainMenu, MenuItem
+
+    pygame.init()
     try:
-        track = Track.from_file(config["track"]["file"], config["track"])
-        trainer = Trainer(config, track, resume=resume)
-    except (TrackError, ValueError) as exc:
-        log.error("Başlatılamadı: %s", exc)
-        return 1
-
-    target = trainer.episode + episodes
-    log.info("Eğitim: %d bölüm · %d araba · cihaz %s · pist %.0f px",
-             episodes, trainer.env.num_cars, trainer.agent.device, track.length)
-    try:
-        while trainer.episode < target:
-            summary = trainer.step().episode
-            if summary is None:
-                continue
-            best = f"{summary.best_lap_time:6.2f} s" if summary.best_lap_time is not None else "     —  "
-            log.info("bölüm %5d | tur %2d/%d | en iyi %s | ilerleme %3.0f%% | ε %.3f",
-                     summary.episode, summary.laps, trainer.env.num_cars, best,
-                     summary.best_progress * 100, summary.epsilon)
-    except KeyboardInterrupt:
-        log.info("Durduruldu.")
+        screen = pygame.display.set_mode(WINDOW, pygame.SCALED)
+        pygame.display.set_caption("AI Simülasyonları")
+        items = [
+            MenuItem("racing", "AI Racing", "16 araba pistte tur atmayı öğrenir · rastgele pistler"),
+            MenuItem("walker", "AI Walker 3D", "hümanoidler sıfırdan yürümeyi ve koşmayı öğrenir"),
+            MenuItem("quit", "Çıkış", ""),
+        ]
+        menu = MainMenu(screen, pygame.time.Clock(), _Slideshow(WINDOW), [], "AI SİMÜLASYONLARI",
+                        "Hiçbir şey bilmeden, deneme yanılmayla öğrenen iki simülasyon")
+        return menu.run(items)
     finally:
-        trainer.save()
-
-    stats = trainer.stats
-    best = f"{stats.best_lap_time:.2f} s" if stats.best_lap_time is not None else "—"
-    log.info("Bitti: toplam %d tur, en iyi tur %s. Model: data/model.pt", stats.total_laps, best)
-    return 0
+        pygame.quit()
 
 
-def use_new_track(config: dict, difficulty: str, seed: int | None, config_path: Path) -> dict | None:
-    """Pist üretir, kaydeder ve yapılandırmayı ona yönlendirir."""
-    from racing import trackgen
-    from racing.config import deep_merge, save_config
-    from racing.track import TrackError
+def main() -> int:
+    os.chdir(PROJECT_DIR)
+    choice = choose()
+    if choice == "racing":
+        from racing.__main__ import main as racing_main
 
-    try:
-        generated = trackgen.generate(difficulty, seed, config["track"])
-    except TrackError as exc:
-        log.error("Pist üretilemedi: %s", exc)
-        return None
-    path = trackgen.save(generated)
-    updated = deep_merge(config, {"track": {"file": path.as_posix(), "reverse": False}})
-    save_config(updated, config_path)
-    log.info("Yeni pist: %s (%s, tohum %d, genişlik %d px)",
-             path, generated.difficulty.label, generated.seed, generated.width)
-    return updated
+        return racing_main([])
+    if choice == "walker":
+        from walker.__main__ import main as walker_main
 
-
-def main(argv: list[str] | None = None) -> int:
-    logging.basicConfig(level=logging.INFO, format="%(message)s")
-    os.chdir(PROJECT_DIR)  # göreli yollar (track.png, data/, logs/) her yerden çalışsın
-    args = parse_args(argv)
-
-    from racing.config import ConfigError, load_config
-
-    try:
-        config = load_config(args.config)
-    except ConfigError as exc:
-        log.error("Yapılandırma hatası: %s", exc)
-        return 2
-
-    if args.new_track:
-        config = use_new_track(config, args.new_track, args.seed, args.config)
-        if config is None:
-            return 1
-
-    if args.headless:
-        return run_headless(config, args.episodes, args.resume)
-
-    from racing.app import App
-
-    App(config).run()
+        return walker_main([])
     return 0
 
 

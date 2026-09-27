@@ -7,7 +7,9 @@ from dataclasses import dataclass
 import numpy as np
 import pygame
 
-from . import theme, trackgen
+from common import theme
+
+from . import trackgen
 from .render import build_track_image
 from .track import Track, TrackError
 
@@ -104,7 +106,7 @@ class TrackPicker:
 
     def _draw(self, busy: bool = False) -> None:
         screen = self.screen
-        w, h = screen.get_size()
+        h = screen.get_height()
         screen.fill(theme.BG)
         theme.text(screen, "Pist oluştur", (72, 40), 40, theme.TEXT, bold=True)
         theme.text(screen, "Her pist rastgele üretilir; kendini kesmez ve kapalı bir döngüdür.", (72, 92), 15,

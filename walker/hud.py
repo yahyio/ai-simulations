@@ -1,21 +1,21 @@
-"""Yürüme simülasyonunun yan paneli: skorlar, lider durumu, öğrenme metrikleri, grafikler."""
+"""Yürüme simülasyonunun yan paneli: skorlar, öndeki karakter, öğrenme metrikleri, grafikler."""
 from __future__ import annotations
 
 from dataclasses import dataclass
 
 import pygame
 
-from racing import theme
+from common import theme
 
-from .env import CONTROL_DT
 from .trainer import WalkTrainer
 
 PANEL_WIDTH = 340
 PAD = 20
-CHART_HEIGHT = 80
+CHART_HEIGHT = 72
 CONTROLS = (
     ("Boşluk", "duraklat"), ("+ / −", "hız"),
-    ("V", "turbo"), ("G", "hayaletler"),
+    ("V", "turbo"), ("C", "kamera açısı"),
+    ("Sürükle", "kamerayı döndür"), ("Tekerlek", "yakınlaş"),
     ("S", "kaydet"), ("Esc", "menü"),
 )
 
@@ -26,7 +26,7 @@ class HudState:
     turbo: bool
     speed: int
     steps_per_sec: float
-    ghosts: bool
+    camera: str
 
 
 def _count(n: float) -> str:
@@ -46,7 +46,8 @@ def line_chart(screen, rect: pygame.Rect, series: list[tuple[list[float], tuple]
     for data, color in series:
         if len(data) < 2:
             continue
-        pts = [(inner.x + inner.w * i / (len(data) - 1), inner.bottom - inner.h * max(v, 0) / hi) for i, v in enumerate(data)]
+        step = inner.w / (len(data) - 1)
+        pts = [(inner.x + step * i, inner.bottom - inner.h * max(v, 0) / hi) for i, v in enumerate(data)]
         pygame.draw.aalines(screen, color, False, pts)
     theme.text(screen, f"{hi:.1f} {unit}", (rect.x + 5, rect.y + 3), 11, theme.TEXT_FAINT, kind="mono")
 
@@ -61,15 +62,15 @@ class WalkHud:
         pygame.draw.line(screen, theme.PANEL_EDGE, r.topleft, r.bottomleft)
         x, w = r.x + PAD, r.w - 2 * PAD
         y = self._header(screen, trainer, state, x, r.y + PAD, w)
-        y = self._scoreboard(screen, trainer, x, y + 14, w)
-        y = self._leader(screen, trainer, x, y + 18, w)
-        y = self._learning(screen, trainer, state, x, y + 16, w)
+        y = self._scoreboard(screen, trainer, x, y + 12, w)
+        y = self._leader(screen, trainer, x, y + 16, w)
+        y = self._learning(screen, trainer, state, x, y + 14, w)
         if trainer.training:
-            self._charts(screen, trainer, x, y + 14, w)
+            self._charts(screen, trainer, x, y + 12, w)
         self._controls(screen, x, r.bottom - PAD, w)
 
     def _header(self, screen, trainer: WalkTrainer, state: HudState, x, y, w) -> int:
-        theme.text(screen, "AI WALKER", (x, y), 24, theme.TEXT, bold=True)
+        theme.text(screen, "AI WALKER 3D", (x, y), 24, theme.TEXT, bold=True)
         if state.paused:
             label, color = "DURAKLATILDI", theme.ACCENT
         elif trainer.updating:
@@ -105,23 +106,21 @@ class WalkHud:
         return y + 44
 
     def _leader(self, screen, trainer: WalkTrainer, x, y, w) -> int:
-        env = trainer.env
-        i = trainer.leader()
-        d = env.datas[i]
-        theme.text(screen, "EN ÖNDEKİ" if trainer.training else "KARAKTER", (x, y), 11, theme.TEXT_FAINT, bold=True)
+        lane = trainer.leader()
+        info = trainer.runner(lane)
+        theme.text(screen, f"EN ÖNDEKİ · kulvar {lane + 1}", (x, y), 11, theme.TEXT_FAINT, bold=True)
         y += 20
         rows = (
-            ("Mesafe", f"{d.qpos[0]:6.2f} m"),
-            ("Hız", f"{d.qvel[0]:6.2f} m/s"),
-            ("Ayakta kalma", f"{env.steps[i] * CONTROL_DT:5.1f} s"),
+            ("Mesafe", f"{info.distance:6.2f} m"),
+            ("Hız", f"{info.speed:6.2f} m/s"),
+            ("Ayakta kalma", f"{info.seconds:5.1f} s"),
         )
         for label, value in rows:
             theme.text(screen, label, (x, y), 14, theme.TEXT_DIM)
             theme.text(screen, value, (x + w, y), 14, theme.TEXT, kind="mono", anchor="topright")
             y += 22
-        contacts = env.foot_contacts(d)
         theme.text(screen, "Yere basan ayak", (x, y), 14, theme.TEXT_DIM)
-        for k, (label, on) in enumerate(zip(("sol", "sağ"), contacts)):
+        for k, (label, on) in enumerate(zip(("sol", "sağ"), info.contacts)):
             cx = x + w - 70 + k * 42
             pygame.draw.circle(screen, theme.GOOD if on else theme.PANEL_EDGE, (cx, y + 9), 7)
             theme.text(screen, label, (cx + 10, y + 1), 12, theme.TEXT_DIM)
@@ -132,10 +131,15 @@ class WalkHud:
         theme.text(screen, "ÖĞRENME" if trainer.training else "MODEL", (x, y), 11, theme.TEXT_FAINT, bold=True)
         y += 20
         speed = "turbo" if state.turbo else f"x{state.speed}"
-        rows = [("Toplam deneyim", f"{_count(ppo.total_steps)} adım"), ("Güncelleme", str(ppo.updates))]
+        rows = [("Toplam deneyim", f"{_count(ppo.total_steps)} adım")]
         if trainer.training:
-            rows.append(("Keşif (gürültü)", f"{ppo.action_std:.3f}"))
-        rows.append(("Sim hızı", f"{speed} · {state.steps_per_sec:,.0f} adım/sn"))
+            rows += [("Güncelleme", str(ppo.updates)),
+                     ("Keşif (gürültü)", f"{ppo.action_std:.3f}"),
+                     ("Paralel karakter", f"{trainer.env.num_envs}")]
+        else:
+            source = trainer.model_source
+            rows.append(("Model", "hazır (depodan)" if source and "models" in source.parts else "yerel en iyi"))
+        rows += [("Sim hızı", f"{speed} · {state.steps_per_sec:,.0f} adım/sn"), ("Kamera", state.camera)]
         for label, value in rows:
             theme.text(screen, label, (x, y), 14, theme.TEXT_DIM)
             theme.text(screen, value, (x + w, y), 14, theme.TEXT, kind="mono", anchor="topright")
@@ -160,7 +164,7 @@ class WalkHud:
                    [(s.history_best_distance, theme.lerp_color(theme.ACCENT, theme.BG, 0.45)),
                     (s.history_mean_distance, theme.ACCENT)],
                    "İlk güncellemeden sonra görünecek", "m")
-        y += CHART_HEIGHT + 34
+        y += CHART_HEIGHT + 32
         theme.text(screen, "AYAKTA KALMA SÜRESİ · ortalama", (x, y), 11, theme.TEXT_FAINT, bold=True)
         line_chart(screen, pygame.Rect(x, y + 18, w, CHART_HEIGHT), [(s.history_mean_seconds, theme.GOOD)],
                    "İlk güncellemeden sonra görünecek", "s")
@@ -172,4 +176,4 @@ class WalkHud:
         for i, (key, action) in enumerate(CONTROLS):
             cx, cy = x + (i % 2) * w / 2, y + (i // 2) * 20
             rect = theme.text(screen, key, (cx, cy), 12, theme.ACCENT, kind="mono", bold=True)
-            theme.text(screen, action, (cx + max(rect.w, 44) + 8, cy), 12, theme.TEXT_DIM)
+            theme.text(screen, action, (cx + max(rect.w, 56) + 6, cy), 12, theme.TEXT_DIM)

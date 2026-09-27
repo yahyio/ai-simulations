@@ -7,7 +7,10 @@ from dataclasses import dataclass
 
 import pygame
 
-from . import theme, trackgen
+from common import theme
+from common.widgets import MainMenu, MenuItem, confirm, draw_loading, show_message
+
+from . import trackgen
 from .config import DEFAULTS, save_config
 from .hud import PANEL_WIDTH, Hud, HudState
 from .picker import TrackPicker
@@ -15,8 +18,10 @@ from .render import SENSOR_MODE_LABELS, SENSORS_ALL, SENSORS_LEADER, SENSORS_OFF
 from .storage import EPISODE_LOG_PATH, STATS_PATH, has_model, load_stats, reset_all
 from .track import Track, TrackError
 from .trainer import Mode, StepEvents, Trainer
-from .ui import MainMenu, MenuItem, SettingsScreen, confirm, draw_loading, show_message
+from .ui import SettingsScreen
 
+TITLE = "AI RACING"
+SUBTITLE = "Pekiştirmeli öğrenme ile kendi kendine süren arabalar"
 SPEEDS = (1, 2, 4, 8, 16)
 TURBO_BUDGET_S = 0.045      # Turbo modda kare başına simülasyona ayrılan süre
 TOAST_SECONDS = 3.0
@@ -55,7 +60,7 @@ class App:
             pygame.quit()
 
     def _load_track(self) -> bool:
-        draw_loading(self.screen, "Pist analiz ediliyor…")
+        draw_loading(self.screen, "Pist analiz ediliyor…", TITLE)
         try:
             self.track = Track.from_file(self.config["track"]["file"], self.config["track"])
         except TrackError as exc:
@@ -80,7 +85,7 @@ class App:
             MenuItem("reset", "Verileri sıfırla", "Model, istatistik ve günlükleri sil", any_data),
             MenuItem("quit", "Çıkış", "Kaydet ve kapat"),
         ]
-        menu = MainMenu(self.screen, self.clock, self.renderer.draw_cover, self._summary())
+        menu = MainMenu(self.screen, self.clock, self.renderer.draw_cover, self._summary(), TITLE, SUBTITLE)
         choice = menu.run(items)
 
         if choice == "quit":
@@ -99,9 +104,8 @@ class App:
             self._pick_track()
         elif choice == "settings":
             self._settings()
-        elif choice == "reset":
-            if confirm(self.screen, self.clock, "Verileri sıfırla",
-                       "Model, istatistikler ve günlükler kalıcı olarak silinecek."):
+        elif choice == "reset" and confirm(self.screen, self.clock, "Verileri sıfırla",
+                                           "Model, istatistikler ve günlükler kalıcı olarak silinecek."):
                 removed = reset_all()
                 show_message(self.screen, self.clock, "Sıfırlandı", f"{len(removed)} dosya silindi.", theme.GOOD)
         return True
@@ -153,7 +157,7 @@ class App:
             self.renderer = Renderer(self.track, self.viewport, car["length"], car["width"])
 
     def _session(self, mode: Mode, resume: bool) -> bool:
-        draw_loading(self.screen, "Model hazırlanıyor…")
+        draw_loading(self.screen, "Model hazırlanıyor…", TITLE)
         try:
             trainer = Trainer(self.config, self.track, mode=mode, resume=resume)
         except (FileNotFoundError, ValueError, RuntimeError) as exc:

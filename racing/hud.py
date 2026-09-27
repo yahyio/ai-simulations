@@ -5,7 +5,8 @@ from dataclasses import dataclass
 
 import pygame
 
-from . import theme
+from common import theme
+
 from .env import Status
 from .trainer import Trainer
 
@@ -202,8 +203,9 @@ class Hud:
         pygame.draw.aalines(screen, theme.ACCENT, False, [to_xy(i, t) for i, t in points])
         best_i, best_t = min(points, key=lambda p: p[1])
         pygame.draw.circle(screen, theme.GOOD, to_xy(best_i, best_t), 4)
-        theme.text(screen, f"{hi:.2f}", (rect.x + 4, rect.y + 2), 11, theme.TEXT_FAINT, kind="mono")
-        theme.text(screen, f"{lo:.2f}", (rect.x + 4, rect.bottom - 14), 11, theme.GOOD, kind="mono")
+        # Kısa tur yukarıda çizilir (iyileşme yukarı doğru); etiketler de buna göre.
+        theme.text(screen, f"{lo:.2f}", (rect.x + 4, rect.y + 2), 11, theme.GOOD, kind="mono")
+        theme.text(screen, f"{hi:.2f}", (rect.x + 4, rect.bottom - 14), 11, theme.TEXT_FAINT, kind="mono")
 
     def _controls(self, screen, x, bottom, w) -> None:
         rows = (len(CONTROLS) + 1) // 2

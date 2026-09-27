@@ -4,27 +4,31 @@ from __future__ import annotations
 import csv
 import json
 import logging
-from dataclasses import asdict, dataclass, field
+from collections.abc import Iterator
+from dataclasses import asdict, dataclass, field, replace
 from datetime import datetime
 from enum import Enum
 from pathlib import Path
-from typing import Iterator
 
 import numpy as np
 
-from .env import MAX_EPISODE_STEPS, TASKS, Episode, Task, WalkerEnv
-from .ppo import PPO, PPOConfig
+from .env import ACT_DIM, CONTACT_OBS, CONTROL_DT, MAX_EPISODE_STEPS, OBS_DIM, TASKS, Episode, Task
+from .ppo import PPO, PPOConfig, expected_header, read_checkpoint_header
+from .vecenv import make_vec_env
 
 log = logging.getLogger(__name__)
 
 DATA_DIR = Path("data") / "walker"
+BUNDLED_DIR = Path("models") / "walker"     # depoyla gelen hazır modeller (yalnızca izleme)
 LOG_DIR = Path("logs")
 STATS_VERSION = 1
 HISTORY_LIMIT = 400
 EPISODE_TAIL = 100          # "en iyi model" için son kaç denemenin ortalaması
 BEST_MIN_EPISODES = 50
 AUTOSAVE_EVERY_UPDATES = 10
+DISPLAY_LANES = 8           # ekranda kulvarlarda gösterilen karakter sayısı
 WATCH_MAX_STEPS = 3 * MAX_EPISODE_STEPS
+SPEED_SMOOTHING = 0.2
 TIMESTAMP_FORMAT = "%Y-%m-%d %H:%M:%S"
 
 
@@ -40,16 +44,40 @@ def paths(task: str) -> dict[str, Path]:
         "best": base / "best_model.pt",
         "stats": base / "stats.json",
         "log": LOG_DIR / f"walker_{task}.csv",
+        "bundled": BUNDLED_DIR / f"{task}.pt",
     }
 
 
-def has_model(task: str) -> bool:
-    return paths(task)["model"].exists()
+class IncompatibleModelError(ValueError):
+    """Kayıtlı model bu sürümle uyumsuz (ör. eski 2B sürümden kalma)."""
+
+
+def checkpoint_compatible(path: Path, cfg: PPOConfig = PPOConfig()) -> bool:
+    """Model dosyası bu ağ ve gözlem boyutlarıyla yüklenebilir mi?"""
+    return path.exists() and read_checkpoint_header(path) == expected_header(OBS_DIM, ACT_DIM, cfg)
+
+
+def has_model(task: str, cfg: PPOConfig = PPOConfig()) -> bool:
+    """Bu bilgisayarda eğitimi sürdürülebilecek bir model var mı?"""
+    return checkpoint_compatible(paths(task)["model"], cfg)
+
+
+def has_legacy_model(task: str, cfg: PPOConfig = PPOConfig()) -> bool:
+    """Yerel model dosyası var ama bu sürümle kullanılamıyor mu?"""
+    path = paths(task)["model"]
+    return path.exists() and not checkpoint_compatible(path, cfg)
+
+
+def watch_source(task: str, cfg: PPOConfig = PPOConfig()) -> Path | None:
+    """İzlemek için en iyi uyumlu model: yerel en iyi → yerel son → depoyla gelen hazır model."""
+    p = paths(task)
+    return next((path for path in (p["best"], p["model"], p["bundled"]) if checkpoint_compatible(path, cfg)), None)
 
 
 def reset_task(task: str) -> list[Path]:
     removed = []
-    for path in paths(task).values():
+    for key in ("model", "best", "stats", "log"):
+        path = paths(task)[key]
         if path.exists():
             path.unlink()
             removed.append(path)
@@ -84,9 +112,11 @@ class WalkStats:
     def close_update(self, episodes: list[Episode]) -> None:
         if not episodes:
             return
-        self.history_mean_distance = (self.history_mean_distance + [float(np.mean([e.distance for e in episodes]))])[-HISTORY_LIMIT:]
+        mean_distance = float(np.mean([e.distance for e in episodes]))
+        mean_seconds = float(np.mean([e.seconds for e in episodes]))
+        self.history_mean_distance = (self.history_mean_distance + [mean_distance])[-HISTORY_LIMIT:]
         self.history_best_distance = (self.history_best_distance + [max(e.distance for e in episodes)])[-HISTORY_LIMIT:]
-        self.history_mean_seconds = (self.history_mean_seconds + [float(np.mean([e.seconds for e in episodes]))])[-HISTORY_LIMIT:]
+        self.history_mean_seconds = (self.history_mean_seconds + [mean_seconds])[-HISTORY_LIMIT:]
 
     @property
     def recent_mean_distance(self) -> float:
@@ -96,7 +126,7 @@ class WalkStats:
         return {"version": STATS_VERSION, **asdict(self)}
 
     @classmethod
-    def from_dict(cls, data: dict) -> "WalkStats":
+    def from_dict(cls, data: dict) -> WalkStats:
         if data.get("version") != STATS_VERSION:
             raise ValueError("tanınmayan istatistik biçimi")
         return cls(**{k: data[k] for k in cls.__dataclass_fields__ if k in data})
@@ -143,30 +173,50 @@ class Tick:
     update_done: bool = False
 
 
+@dataclass(frozen=True)
+class RunnerInfo:
+    distance: float
+    speed: float
+    seconds: float
+    contacts: tuple[bool, bool]
+
+
 class WalkTrainer:
     def __init__(self, task_key: str, mode: Mode = Mode.TRAIN, resume: bool = False,
-                 cfg: PPOConfig = PPOConfig(), seed: int | None = None):
+                 cfg: PPOConfig = PPOConfig(), seed: int | None = None, workers: int | None = None):
         if task_key not in TASKS:
             raise ValueError(f"Bilinmeyen görev: {task_key!r}")
         self.task: Task = TASKS[task_key]
         self.mode = mode
         self.training = mode is Mode.TRAIN
         self.paths = paths(task_key)
-        num_envs = cfg.num_envs if self.training else 1
-        max_steps = MAX_EPISODE_STEPS if self.training else WATCH_MAX_STEPS
-        self.env = WalkerEnv(num_envs, self.task, seed=seed, max_steps=max_steps)
-        self.ppo = PPO(self.env.obs_dim, self.env.act_dim, cfg, seed=seed)
-        self.stats = load_stats(task_key) if (resume or not self.training) else WalkStats(task=task_key)
-
-        if self.training and resume and self.paths["model"].exists():
-            self.ppo.load(self.paths["model"])
-        elif not self.training:
-            path = self.paths["best"] if self.paths["best"].exists() else self.paths["model"]
-            if not path.exists():
-                raise FileNotFoundError(f"İzlenecek {self.task.label.lower()} modeli yok. Önce eğitin.")
-            self.ppo.load(path)
+        self.model_source: Path | None = None
+        if self.training:
+            self.env = make_vec_env(cfg.num_envs, task_key, seed=seed, workers=workers)
+        else:
+            cfg = replace(cfg, num_envs=DISPLAY_LANES)
+            self.env = make_vec_env(DISPLAY_LANES, task_key, seed=seed, workers=0, max_steps=WATCH_MAX_STEPS)
+        try:
+            self.ppo = PPO(self.env.obs_dim, self.env.act_dim, cfg, seed=seed)
+            self.stats = load_stats(task_key) if (resume or not self.training) else WalkStats(task=task_key)
+            if self.training and resume and self.paths["model"].exists():
+                if not checkpoint_compatible(self.paths["model"], cfg):
+                    raise IncompatibleModelError(
+                        f"{self.paths['model']} bu sürümle uyumsuz (büyük olasılıkla eski 2B sürümden kalma).")
+                self.ppo.load(self.paths["model"])
+            elif not self.training:
+                self.model_source = watch_source(task_key, cfg)
+                if self.model_source is None:
+                    raise FileNotFoundError(f"İzlenecek {self.task.label.lower()} modeli yok. Önce eğitin.")
+                self.ppo.load(self.model_source)
+        except Exception:
+            self.env.close()
+            raise
 
         self.obs = self.env.reset()
+        self.qpos = self.env.qpos
+        self.steps = self.env.steps
+        self.speeds = np.zeros(self.env.num_envs)
         self._update: Iterator[None] | None = None
         self._since_update: list[Episode] = []
         self.watch_episodes: list[Episode] = []
@@ -175,6 +225,10 @@ class WalkTrainer:
     @property
     def updating(self) -> bool:
         return self._update is not None
+
+    @property
+    def display_count(self) -> int:
+        return min(self.env.num_envs, DISPLAY_LANES)
 
     def tick(self) -> Tick:
         """Bir iş birimi: öğrenme sürüyorsa bir mini-parti, değilse bir ortam adımı."""
@@ -188,13 +242,17 @@ class WalkTrainer:
                 return Tick(update_done=True)
 
         actions, norm, logp, values = self.ppo.act(self.obs, deterministic=not self.training, learn=self.training)
-        obs, rewards, terminated, truncated, final_obs, finished = self.env.step(actions)
-        if self.training and self.ppo.record(norm, actions, logp, values, rewards, terminated, truncated, final_obs):
-            self._update = self.ppo.update(obs)
-        self.obs = obs
-        return Tick(finished=tuple(finished), new_record=self._record(finished))
+        prev_x = self.qpos[:, 0].copy()
+        batch = self.env.step(actions)
+        if self.training and self.ppo.record(norm, actions, logp, values, batch.rewards,
+                                             batch.terminated, batch.truncated, batch.final_obs):
+            self._update = self.ppo.update(batch.obs)
+        self.obs, self.qpos, self.steps = batch.obs, batch.qpos, batch.steps
+        speed = np.where(self.steps > 0, (self.qpos[:, 0] - prev_x) / CONTROL_DT, 0.0)
+        self.speeds = (1 - SPEED_SMOOTHING) * self.speeds + SPEED_SMOOTHING * speed
+        return Tick(finished=batch.finished, new_record=self._record(batch.finished))
 
-    def _record(self, finished: list[Episode]) -> bool:
+    def _record(self, finished: tuple[Episode, ...]) -> bool:
         if not self.training:
             self.watch_episodes.extend(finished)
             return False
@@ -215,10 +273,20 @@ class WalkTrainer:
         if self.ppo.updates % AUTOSAVE_EVERY_UPDATES == 0:
             self.save()
 
+    # ------------------------------------------------------------------ #
+    def leader(self) -> int:
+        """Ekrandaki kulvarlarda en önde giden."""
+        return int(np.argmax(self.qpos[: self.display_count, 0]))
+
+    def runner(self, i: int) -> RunnerInfo:
+        contacts = self.obs[i, CONTACT_OBS] > 0.5
+        return RunnerInfo(float(self.qpos[i, 0]), float(self.speeds[i]), float(self.steps[i] * CONTROL_DT),
+                          (bool(contacts[1]), bool(contacts[0])))   # (sol, sağ)
+
     def save(self) -> None:
         if self.training:
             self.ppo.save(self.paths["model"])
             save_stats(self.stats)
 
-    def leader(self) -> int:
-        return int(np.argmax(self.env.positions()))
+    def close(self) -> None:
+        self.env.close()

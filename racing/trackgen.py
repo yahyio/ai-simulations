@@ -117,7 +117,9 @@ def is_well_formed(curve: np.ndarray, width: int) -> bool:
         return False
 
     prev, nxt = np.roll(curve, 1, axis=0), np.roll(curve, -1, axis=0)
-    a, b, c = np.linalg.norm(curve - prev, axis=1), np.linalg.norm(nxt - curve, axis=1), np.linalg.norm(nxt - prev, axis=1)
+    a = np.linalg.norm(curve - prev, axis=1)
+    b = np.linalg.norm(nxt - curve, axis=1)
+    c = np.linalg.norm(nxt - prev, axis=1)
     u, v = curve - prev, nxt - curve
     cross = np.abs(u[:, 0] * v[:, 1] - u[:, 1] * v[:, 0])
     radius = a * b * c / np.maximum(2 * cross, 1e-9)   # üç noktadan geçen çemberin yarıçapı

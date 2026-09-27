@@ -239,7 +239,7 @@ class Track:
         self._build_progress(center, normal, along)
 
     @classmethod
-    def from_file(cls, path: str | Path, track_cfg: dict) -> "Track":
+    def from_file(cls, path: str | Path, track_cfg: dict) -> Track:
         path = Path(path)
         if not path.exists():
             raise TrackError(f"Pist dosyası bulunamadı: {path}")

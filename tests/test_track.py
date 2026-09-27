@@ -1,4 +1,5 @@
 import math
+from itertools import pairwise
 
 import numpy as np
 import pytest
@@ -28,7 +29,7 @@ def test_lap_length_is_between_inner_and_mid_circumference(ring_track):
 
 def test_progress_increases_clockwise(ring_track):
     values = [float(ring_track.progress_at(*ring_point(a))) for a in range(10, 351, 20)]
-    assert all(b > a for a, b in zip(values, values[1:]))
+    assert all(b > a for a, b in pairwise(values))
     assert values[0] < 0.1 * ring_track.length
     assert values[-1] > 0.9 * ring_track.length
 

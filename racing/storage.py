@@ -82,7 +82,7 @@ class TrainingStats:
         return {"version": STATS_VERSION, **asdict(self)}
 
     @classmethod
-    def from_dict(cls, data: dict) -> "TrainingStats":
+    def from_dict(cls, data: dict) -> TrainingStats:
         if data.get("version") != STATS_VERSION:
             raise ValueError("eski veya tanınmayan istatistik biçimi")
         known = {k: data[k] for k in cls.__dataclass_fields__ if k in data}
